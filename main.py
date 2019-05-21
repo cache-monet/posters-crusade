@@ -1,29 +1,37 @@
 import time
-from selenium import webdriver 
+from flask import Flask, jsonify, request
 from bs4 import BeautifulSoup
+from selenium import webdriver 
 from typing import List, Dict
 
+app = Flask(__name__)
 # Map of subreddits and number of posts
 
-def collector(users: List[str], limit: int = 100) -> Dict[str, dict]:
+@app.route('/')
+def home():
+    return "Welcome poster!"
+
+@app.route('/posts', methods=['GET'])
+def collection():
     """
     Collects analytics on an user' recent acvitvity
 
-    :param users: list of usernames
-    :param limit: upper limit on how many posts crawler collects defaults to 100 posts
+    :data users: list of usernames
+    :data limit: upper limit on how many posts crawler collects defaults to 100 posts
     """
-    post_analytics = {}
-    for u in users:
-        post_analytics[u] = parse_posts("https://reddit.com/user/{}/posts".format(u), limit)
+    data = request.get_json()
+    if not data:
+        raise Exception("401 - Empty request Body")
 
-    for user, posts in post_analytics.items():
-        print("User {} has:".format(user))
-        total_posts = 0
-        for r, p in posts.items():
-            print("{} posts in in {}".format(p, r))
-            total_posts += p
-        print("{} total posts\n".format(total_posts))
-    
+    users = data.get('users') or []
+    limit = data.get('limit') or 100
+
+    post_analytics = {}
+    for user in users:
+        post_url = "https://reddit.com/user/{}/posts".format(user)
+        post_analytics[user] = parse_posts(post_url, limit)
+    return jsonify(post_analytics)
+
 def parse_posts(url: str, limit: int) -> dict:
     """
     Collects user post history
@@ -39,7 +47,9 @@ def parse_posts(url: str, limit: int) -> dict:
         if link.has_attr('data-click-id') and link['data-click-id'] == 'subreddit':
             r, c = link.text, c+1
             rs[r] = 1 if r not in rs else rs[r]+1
-            if c >= limit: return rs
+            if c >= limit:
+                break
+    rs["total"] = c
     return rs
     
 def process_page(url: str, scrolls: int):
